@@ -3,18 +3,15 @@
 # audit.sh - Read-only inventory of agent skills across known roots.
 #
 # This script NEVER mutates anything. It only reads. It produces two outputs:
-#   1. A table (one row per skill) sorted stalest-first, with modified date,
-#      scope, plugin flag, SKILL.md line count, folder size, name, and a
-#      truncated description.
-#   2. A duplicate-name report, since name collisions across roots are the
-#      main cause of Claude silently routing to the wrong skill.
-#   3. A full-descriptions block, so the triage layer can read complete
-#      descriptions to spot trigger-space overlap between differently-named
-#      skills (the table truncates them for human scanning).
+#   1. A short summary and "start here" checklist.
+#   2. Duplicate-name and health reports, since these are the first actions.
+#   3. Top cleanup candidates by line count and age.
+#   4. Optional full inventory / descriptions for drill-down.
 #
 # Usage:
 #   audit.sh [--agent NAME] [--all-agents]
 #            [--personal DIR] [--project DIR] [--plugins DIR] [--add-dir DIR]...
+#            [--limit N] [--full-table] [--full-descriptions]
 #
 # Defaults to --all-agents when no roots or agents are specified.
 #
@@ -37,6 +34,9 @@ AGENTS=()
 ALL_AGENTS=0
 LEGACY_ROOTS_SET=0
 TSV=0
+FULL_TABLE=0
+FULL_DESCRIPTIONS=0
+LIMIT=12
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -46,6 +46,9 @@ while [[ $# -gt 0 ]]; do
     --add-dir)  ADD_DIRS+=("$2");   shift 2 ;;
     --agent)    AGENTS+=("$2");     shift 2 ;;
     --all-agents) ALL_AGENTS=1; shift ;;
+    --limit)    LIMIT="$2"; shift 2 ;;
+    --full-table) FULL_TABLE=1; shift ;;
+    --full-descriptions) FULL_DESCRIPTIONS=1; shift ;;
     --tsv)      TSV=1; shift ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
@@ -244,7 +247,7 @@ if [[ "$TSV" -eq 1 ]]; then
 fi
 
 echo "============================================================================"
-echo " AGENT SKILL INVENTORY"
+echo " AGENT SKILL AUDIT"
 echo " Roots scanned:"
 if [[ "$ALL_AGENTS" -eq 1 ]]; then echo "   agents   : claude-code, codex, agents"; fi
 for agent in "${AGENTS[@]:-}"; do [[ -n "$agent" ]] && echo "   agent    : $agent"; done
@@ -263,30 +266,62 @@ if [[ "${TOTAL:-0}" -eq 0 ]]; then
   exit 0
 fi
 
-# ---- Table: stalest first (ascending epoch) -------------------------------
-printf '%-12s %-9s %-7s %6s %7s  %-28s %s\n' \
-  "MODIFIED" "SCOPE" "PLUGIN" "LINES" "SIZE" "NAME" "DESCRIPTION"
-printf '%-12s %-9s %-7s %6s %7s  %-28s %s\n' \
-  "------------" "---------" "-------" "------" "-------" "----------------------------" "-----------"
+DUPES="$(cut -f7 "$RECORDS" | sort | uniq -d)"
+DUPES_COUNT=0
+if [[ -n "$DUPES" ]]; then
+  DUPES_COUNT="$(printf '%s\n' "$DUPES" | sed '/^$/d' | wc -l | tr -d ' ')"
+fi
+HEALTH_COUNT="$(sort -u "$HEALTH" 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ')"
+PLUGIN_COUNT="$(awk -F'\t' '$4=="yes"{c++} END{print c+0}' "$RECORDS")"
+TOTAL_LINES="$(awk -F'\t' '{sum += $5} END{print sum+0}' "$RECORDS")"
 
-sort -t$'\t' -k1,1n "$RECORDS" | while IFS=$'	' read -r epoch d scope plugin lines size name dir desc; do
-  printf '%-12s %-9s %-7s %6s %7s  %-28s %s\n' \
-    "$d" "$scope" "$plugin" "$lines" "$size" \
-    "$(truncate_str "$name" 28)" "$(truncate_str "$desc" 70)"
-done
+echo "Summary"
+echo "-------"
+printf '  Skills        : %s\n' "$TOTAL"
+printf '  Plugin skills : %s\n' "$PLUGIN_COUNT"
+printf '  Duplicate names: %s\n' "$DUPES_COUNT"
+printf '  Health issues : %s\n' "$HEALTH_COUNT"
+printf '  SKILL.md lines: %s total\n' "$TOTAL_LINES"
 
 echo
-echo "Sorted stalest-first. The skills at the top are the oldest and the first"
-echo "triage candidates. LINES is SKILL.md body size (startup-context cost)."
+echo "Start here"
+echo "----------"
+if [[ "$HEALTH_COUNT" -gt 0 ]]; then
+  echo "  1. Fix health issues first. Broken metadata can prevent loading or misroute skills."
+else
+  echo "  1. Health metadata looks OK."
+fi
+if [[ "$DUPES_COUNT" -gt 0 ]]; then
+  echo "  2. Resolve duplicate names. Pick one owner per name before pruning."
+else
+  echo "  2. No duplicate names detected."
+fi
+echo "  3. Review the largest and oldest skills below; these are triage candidates, not delete orders."
+echo "  4. Use --full-table for every skill, or --full-descriptions for overlap triage."
+
+# ---- Health problems -------------------------------------------------------
+echo
+echo "----------------------------------------------------------------------------"
+echo " Health issues"
+echo "----------------------------------------------------------------------------"
+if [[ -s "$HEALTH" ]]; then
+  echo "Fix these before pruning. A broken skill can fail to load or route poorly:"
+  echo
+  sort -u "$HEALTH" | while IFS=$'\t' read -r hn hissue hdir; do
+    printf '  %-28s %s\n' "$hn" "$hissue"
+    printf '      %s\n' "$hdir"
+  done
+else
+  echo "None."
+fi
 
 # ---- Duplicate-name report -------------------------------------------------
 echo
 echo "----------------------------------------------------------------------------"
-echo " DUPLICATE NAMES ACROSS ROOTS"
+echo " Duplicate names"
 echo "----------------------------------------------------------------------------"
-DUPES="$(cut -f7 "$RECORDS" | sort | uniq -d)"
 if [[ -z "$DUPES" ]]; then
-  echo "None. No name collisions detected."
+  echo "None."
 else
   echo "These names appear in more than one place. Your agent may route to the wrong"
   echo "one. Pick a single owner per name during triage:"
@@ -298,32 +333,53 @@ else
   done <<< "$DUPES"
 fi
 
-# ---- Health problems -------------------------------------------------------
+# ---- Top candidates --------------------------------------------------------
 echo
 echo "----------------------------------------------------------------------------"
-echo " HEALTH PROBLEMS"
+echo " Top cleanup candidates"
 echo "----------------------------------------------------------------------------"
-if [[ -s "$HEALTH" ]]; then
-  echo "Fix or quarantine these regardless of usage. A broken skill either fails"
-  echo "to load or misroutes:"
+echo "Largest by SKILL.md line count. Big does not mean bad; it means costly to load."
+printf '%6s  %-28s %-16s %s\n' "LINES" "NAME" "SCOPE" "DESCRIPTION"
+printf '%6s  %-28s %-16s %s\n' "------" "----------------------------" "----------------" "-----------"
+sort -t$'\t' -k5,5nr "$RECORDS" | head -n "$LIMIT" | while IFS=$'\t' read -r epoch d scope plugin lines size name dir desc; do
+  printf '%6s  %-28s %-16s %s\n' "$lines" "$(truncate_str "$name" 28)" "$scope" "$(truncate_str "$desc" 68)"
+done
+
+echo
+echo "Oldest modified dates. Old does not mean unused; pair this with usage.sh."
+printf '%-12s %-28s %-16s %s\n' "MODIFIED" "NAME" "SCOPE" "DESCRIPTION"
+printf '%-12s %-28s %-16s %s\n' "------------" "----------------------------" "----------------" "-----------"
+sort -t$'\t' -k1,1n "$RECORDS" | head -n "$LIMIT" | while IFS=$'\t' read -r epoch d scope plugin lines size name dir desc; do
+  printf '%-12s %-28s %-16s %s\n' "$d" "$(truncate_str "$name" 28)" "$scope" "$(truncate_str "$desc" 68)"
+done
+
+if [[ "$FULL_TABLE" -eq 1 ]]; then
   echo
-  sort -u "$HEALTH" | while IFS=$'\t' read -r hn hissue hdir; do
-    printf '  %-26s %s\n' "$hn" "$hissue"
-    printf '      %s\n' "$hdir"
+  echo "----------------------------------------------------------------------------"
+  echo " Full inventory"
+  echo "----------------------------------------------------------------------------"
+  printf '%-12s %-16s %-7s %6s %7s  %-28s %s\n' \
+    "MODIFIED" "SCOPE" "PLUGIN" "LINES" "SIZE" "NAME" "DESCRIPTION"
+  printf '%-12s %-16s %-7s %6s %7s  %-28s %s\n' \
+    "------------" "----------------" "-------" "------" "-------" "----------------------------" "-----------"
+  sort -t$'\t' -k1,1n "$RECORDS" | while IFS=$'\t' read -r epoch d scope plugin lines size name dir desc; do
+    printf '%-12s %-16s %-7s %6s %7s  %-28s %s\n' \
+      "$d" "$scope" "$plugin" "$lines" "$size" \
+      "$(truncate_str "$name" 28)" "$(truncate_str "$desc" 70)"
   done
-else
-  echo "None. Frontmatter, names, and filenames look well-formed."
 fi
 
 # ---- Full descriptions (for overlap triage) --------------------------------
-echo
-echo "----------------------------------------------------------------------------"
-echo " FULL DESCRIPTIONS (read these to find trigger-space overlap)"
-echo "----------------------------------------------------------------------------"
-sort -t$'\t' -k7,7 "$RECORDS" | while IFS=$'	' read -r epoch d scope plugin lines size name dir desc; do
-  echo "[$scope] $name"
-  echo "    ${desc:-(no description)}"
-done
+if [[ "$FULL_DESCRIPTIONS" -eq 1 ]]; then
+  echo
+  echo "----------------------------------------------------------------------------"
+  echo " Full descriptions (for trigger-overlap triage)"
+  echo "----------------------------------------------------------------------------"
+  sort -t$'\t' -k7,7 "$RECORDS" | while IFS=$'\t' read -r epoch d scope plugin lines size name dir desc; do
+    echo "[$scope] $name"
+    echo "    ${desc:-(no description)}"
+  done
+fi
 
 echo
 echo "Audit complete. This was read-only. No files were changed."

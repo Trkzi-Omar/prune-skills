@@ -69,8 +69,9 @@ on. The only acceptable workflow is:
 The skill wraps three shell scripts:
 
 - **`audit.sh`** - read-only inventory across Claude Code, Codex, shared agent,
-  project, plugin, and extra skill roots. Reports duplicate names, missing
-  descriptions, name/folder mismatches, and non-loading skill folders.
+  project, plugin, and extra skill roots. Leads with a concise summary, then
+  reports duplicate names, missing descriptions, name/folder mismatches, and
+  non-loading skill folders.
 - **`usage.sh`** - read-only usage signal from Claude and Codex transcript logs.
   Looks for explicit `Using \`skill-name\`` markers, then shows stale skills and
   skills with no readable log hits.
@@ -87,6 +88,24 @@ Inventory all known agent skill roots:
 
 ```bash
 bash scripts/audit.sh --all-agents
+```
+
+Show fewer top candidates:
+
+```bash
+bash scripts/audit.sh --all-agents --limit 5
+```
+
+Show every skill in the inventory table:
+
+```bash
+bash scripts/audit.sh --all-agents --full-table
+```
+
+Show full descriptions for trigger-overlap triage:
+
+```bash
+bash scripts/audit.sh --all-agents --full-descriptions
 ```
 
 Inventory one agent preset:

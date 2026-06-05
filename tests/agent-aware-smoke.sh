@@ -35,11 +35,17 @@ usage_out="$TMP_REAL/usage.out"
 
 "$ROOT/scripts/audit.sh" --all-agents > "$audit_out"
 grep -F "Skills found: 5" "$audit_out" >/dev/null
+grep -F "Start here" "$audit_out" >/dev/null
+grep -F "Top cleanup candidates" "$audit_out" >/dev/null
 grep -F "claude-one" "$audit_out" >/dev/null
 grep -F "codex-direct" "$audit_out" >/dev/null
 grep -F "codex-nested" "$audit_out" >/dev/null
 grep -F "agent-one" "$audit_out" >/dev/null
 grep -F "codex-plugin" "$audit_out" >/dev/null
+! grep -F "Full descriptions" "$audit_out" >/dev/null
+
+"$ROOT/scripts/audit.sh" --all-agents --full-descriptions > "$audit_out"
+grep -F "Full descriptions" "$audit_out" >/dev/null
 
 "$ROOT/scripts/usage.sh" --all-agents --days 7 > "$usage_out"
 grep -F "logs    :" "$usage_out" >/dev/null

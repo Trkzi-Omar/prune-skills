@@ -16,10 +16,11 @@ This is a workflow-enforcement skill: run the procedure, do not improvise deleti
 ## Tools (bundled, in `scripts/`)
 
 - `audit.sh` - read-only. Inventory across Claude Code, Codex, and local agent roots,
-  stalest-first, plus duplicate-name and health reports. Spots collisions, missing
-  descriptions, name/folder mismatches, and primary files not named `SKILL.md`.
-  Supports `--agent claude-code`, `--agent codex`, `--agent agents`, and
-  `--all-agents`. Never mutates.
+  with a concise human-readable summary first, plus duplicate-name, health, largest,
+  and oldest reports. Spots collisions, missing descriptions, name/folder mismatches,
+  and primary files not named `SKILL.md`. Supports `--agent claude-code`,
+  `--agent codex`, `--agent agents`, `--all-agents`, `--limit N`, `--full-table`,
+  and `--full-descriptions`. Never mutates.
 - `usage.sh` - read-only. Last-used per skill, derived from Claude Code transcript logs
   under `~/.claude/projects` and Codex JSONL logs under `~/.codex/sessions` and
   `~/.codex/archived_sessions`. Looks for explicit `Using \`skill-name\`` markers
@@ -44,7 +45,10 @@ Nothing destructive happens before a snapshot exists.
 ### 2. Inventory (read-only)
 
 - [ ] `bash scripts/audit.sh --all-agents`
-- [ ] Read the duplicate-name and health sections aloud to the user. These are the first cuts.
+- [ ] Read the **Start here**, duplicate-name, and health sections aloud to the user.
+      These are the first cuts.
+- [ ] Use `--full-table` only when the user wants every skill listed. Use
+      `--full-descriptions` only when doing trigger-overlap triage.
 - [ ] If the user only wanted to look, stop here. This satisfies a pure-audit request.
 
 ### 3. Usage (read-only)
