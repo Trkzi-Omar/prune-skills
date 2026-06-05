@@ -15,11 +15,17 @@ This is a workflow-enforcement skill: run the procedure, do not improvise deleti
 
 ## Tools (bundled, in `scripts/`)
 
-- `audit.sh` - read-only. Inventory across all roots, stalest-first, plus duplicate-name
-  and health reports. Spots collisions, missing descriptions, name/folder mismatches,
-  and primary files not named `SKILL.md`. Never mutates.
+- `audit.sh` - read-only. Inventory across Claude Code, Codex, and local agent roots,
+  stalest-first, plus duplicate-name and health reports. Spots collisions, missing
+  descriptions, name/folder mismatches, and primary files not named `SKILL.md`.
+  Supports `--agent claude-code`, `--agent codex`, `--agent agents`, and
+  `--all-agents`. Never mutates.
 - `usage.sh` - read-only. Last-used per skill, derived from Claude Code transcript logs
-  under `~/.claude/projects`. Flags skills not seen within N days (default 7). Never mutates.
+  under `~/.claude/projects` and Codex JSONL logs under `~/.codex/sessions` and
+  `~/.codex/archived_sessions`. Looks for explicit `Using \`skill-name\`` markers
+  so available-skill lists do not count as usage. Flags skills not seen within N
+  days (default 7). Scans the same log history window as `--days` by default;
+  pass `--log-history-days 0` for an exhaustive scan. Never mutates.
 - `prune.sh` - the destructive half. `snapshot`, `quarantine`, `list`, `restore`, `purge`.
   Guarded: refuses read-only mounts and anything outside `$HOME`/cwd; `purge` needs `--yes`.
 
@@ -27,8 +33,9 @@ This is a workflow-enforcement skill: run the procedure, do not improvise deleti
 
 ### 1. Locate and snapshot
 
-- [ ] Identify roots: personal `~/.claude/skills`, project `.claude/skills`, any
-      `--add-dir` roots, plugin skills under `~/.claude/plugins`.
+- [ ] Identify roots: personal `~/.claude/skills`, Codex `~/.codex/skills`,
+      shared agent `~/.agents/skills`, project roots, any `--add-dir` roots,
+      and plugin skills under Claude/Codex plugin caches.
 - [ ] `bash scripts/prune.sh snapshot <root>` for each user-writable root. Report the path.
 - [ ] Do not snapshot or touch read-only mounts or Anthropic-managed prebuilt skills.
 
@@ -36,13 +43,14 @@ Nothing destructive happens before a snapshot exists.
 
 ### 2. Inventory (read-only)
 
-- [ ] `bash scripts/audit.sh --personal ~/.claude/skills --project ./.claude/skills --plugins ~/.claude/plugins`
+- [ ] `bash scripts/audit.sh --all-agents`
 - [ ] Read the duplicate-name and health sections aloud to the user. These are the first cuts.
 - [ ] If the user only wanted to look, stop here. This satisfies a pure-audit request.
 
 ### 3. Usage (read-only)
 
-- [ ] `bash scripts/usage.sh --days 7` to see what has not been invoked recently.
+- [ ] `bash scripts/usage.sh --all-agents --days 7` to see what has not been invoked recently.
+      If the user asks for exhaustive history, add `--log-history-days 0`.
 - [ ] Treat "no log hits" as a triage signal, never proof. Logs compact and rotate, and a
       fresh machine has no history.
 

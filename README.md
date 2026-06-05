@@ -33,6 +33,16 @@ The first run should be read-only. It should inventory your skills, show duplica
 names, report health problems, and explain what it would prune before touching
 anything.
 
+If you run the scripts manually, start with all known agent roots:
+
+```bash
+bash scripts/audit.sh --all-agents
+bash scripts/usage.sh --all-agents --days 7
+```
+
+`usage.sh` scans the same log history window as `--days` by default. For a
+slower exhaustive scan, add `--log-history-days 0`.
+
 ## Why This Exists
 
 I built this because my skills directory got out of hand.
@@ -58,11 +68,12 @@ on. The only acceptable workflow is:
 
 The skill wraps three shell scripts:
 
-- **`audit.sh`** - read-only inventory across personal, project, plugin, and
-  extra skill roots. Reports duplicate names, missing descriptions,
-  name/folder mismatches, and non-loading skill folders.
-- **`usage.sh`** - read-only usage signal from Claude transcript logs. Shows
-  stale skills and skills with no readable log hits.
+- **`audit.sh`** - read-only inventory across Claude Code, Codex, shared agent,
+  project, plugin, and extra skill roots. Reports duplicate names, missing
+  descriptions, name/folder mismatches, and non-loading skill folders.
+- **`usage.sh`** - read-only usage signal from Claude and Codex transcript logs.
+  Looks for explicit `Using \`skill-name\`` markers, then shows stale skills and
+  skills with no readable log hits.
 - **`prune.sh`** - guarded mutation commands: `snapshot`, `quarantine`, `list`,
   `restore`, and `purge`.
 
@@ -72,19 +83,28 @@ delete later.
 
 ## Manual Script Usage
 
-Inventory skills:
+Inventory all known agent skill roots:
 
 ```bash
-bash scripts/audit.sh \
-  --personal ~/.claude/skills \
-  --project ./.claude/skills \
-  --plugins ~/.claude/plugins
+bash scripts/audit.sh --all-agents
+```
+
+Inventory one agent preset:
+
+```bash
+bash scripts/audit.sh --agent codex
 ```
 
 Check recent usage:
 
 ```bash
-bash scripts/usage.sh --days 7
+bash scripts/usage.sh --all-agents --days 7
+```
+
+Scan all readable logs instead of the recent default:
+
+```bash
+bash scripts/usage.sh --all-agents --days 7 --log-history-days 0
 ```
 
 Snapshot a writable root:
@@ -146,6 +166,12 @@ Run a syntax check:
 
 ```bash
 bash -n scripts/audit.sh scripts/usage.sh scripts/prune.sh
+```
+
+Run the agent-aware smoke test:
+
+```bash
+bash tests/agent-aware-smoke.sh
 ```
 
 ## Summary

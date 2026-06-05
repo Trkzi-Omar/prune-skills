@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# audit.sh - Read-only inventory of every Claude Code skill across all roots.
+# audit.sh - Read-only inventory of agent skills across known roots.
 #
 # This script NEVER mutates anything. It only reads. It produces two outputs:
 #   1. A table (one row per skill) sorted stalest-first, with modified date,
@@ -13,12 +13,15 @@
 #      skills (the table truncates them for human scanning).
 #
 # Usage:
-#   audit.sh [--personal DIR] [--project DIR] [--plugins DIR] [--add-dir DIR]...
+#   audit.sh [--agent NAME] [--all-agents]
+#            [--personal DIR] [--project DIR] [--plugins DIR] [--add-dir DIR]...
 #
-# Defaults (skipped silently if absent):
-#   --personal  ~/.claude/skills
-#   --project   ./.claude/skills
-#   --plugins   ~/.claude/plugins   (scanned as <plugins>/*/skills/<skill>)
+# Defaults to --all-agents when no roots or agents are specified.
+#
+# Agent presets:
+#   --agent claude-code  ~/.claude/skills, ./.claude/skills, ~/.claude/plugins
+#   --agent codex        ~/.codex/skills, ./.codex/skills, ~/.codex/plugins/cache
+#   --agent agents       ~/.agents/skills, ./.agents/skills
 #
 # Pass --add-dir one or more times for extra roots supplied via Claude Code's
 # --add-dir flag. Each --add-dir is treated as a skills root whose immediate
@@ -30,14 +33,19 @@ PERSONAL_ROOT="${HOME}/.claude/skills"
 PROJECT_ROOT="./.claude/skills"
 PLUGINS_ROOT="${HOME}/.claude/plugins"
 ADD_DIRS=()
+AGENTS=()
+ALL_AGENTS=0
+LEGACY_ROOTS_SET=0
 TSV=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --personal) PERSONAL_ROOT="$2"; shift 2 ;;
-    --project)  PROJECT_ROOT="$2";  shift 2 ;;
-    --plugins)  PLUGINS_ROOT="$2";  shift 2 ;;
+    --personal) PERSONAL_ROOT="$2"; LEGACY_ROOTS_SET=1; shift 2 ;;
+    --project)  PROJECT_ROOT="$2";  LEGACY_ROOTS_SET=1; shift 2 ;;
+    --plugins)  PLUGINS_ROOT="$2";  LEGACY_ROOTS_SET=1; shift 2 ;;
     --add-dir)  ADD_DIRS+=("$2");   shift 2 ;;
+    --agent)    AGENTS+=("$2");     shift 2 ;;
+    --all-agents) ALL_AGENTS=1; shift ;;
     --tsv)      TSV=1; shift ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
@@ -112,17 +120,26 @@ truncate_str() {
 #   epoch date scope plugin lines size name dir description health
 RECORDS="$(mktemp)"
 HEALTH="$(mktemp)"
-trap 'rm -f "$RECORDS" "$HEALTH"' EXIT
+SEEN="$(mktemp)"
+trap 'rm -f "$RECORDS" "$HEALTH" "$SEEN"' EXIT
 
 # scan_root SCOPE_LABEL PLUGIN_FLAG ROOT
-# Treats each immediate child dir of ROOT that contains SKILL.md as one skill.
+# Treats each child dir of ROOT that contains SKILL.md as one skill. The default
+# is immediate children. Pass "recursive" for bundle-style roots such as
+# ~/.codex/skills, where packages may contain skills/<skill>/SKILL.md.
 scan_root() {
-  local scope="$1" plugin="$2" root="$3"
+  local scope="$1" plugin="$2" root="$3" mode="${4:-immediate}"
   [[ -d "$root" ]] || return 0
   local skill_md dir base fm_name name desc lines size epoch d health
+  local find_args=(-mindepth 2 -maxdepth 2 -name SKILL.md)
+  [[ "$mode" == "recursive" ]] && find_args=(-mindepth 2 -name SKILL.md)
   while IFS= read -r skill_md; do
     [[ -n "$skill_md" ]] || continue
     dir="$(dirname "$skill_md")"
+    dir="$(cd "$dir" 2>/dev/null && pwd -P)"
+    [[ -n "$dir" ]] || continue
+    grep -Fxq "$dir" "$SEEN" && continue
+    printf '%s\n' "$dir" >> "$SEEN"
     base="$(basename "$dir")"
     fm_name="$(frontmatter_value "$skill_md" name)"
     name="${fm_name:-$base}"
@@ -141,7 +158,7 @@ scan_root() {
 
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$epoch" "$d" "$scope" "$plugin" "${lines:-0}" "${size:-?}" "$name" "$dir" "$desc" >> "$RECORDS"
-  done < <(find "$root" -mindepth 2 -maxdepth 2 -name SKILL.md 2>/dev/null)
+  done < <(find "$root" "${find_args[@]}" 2>/dev/null)
 
   # Misnamed primary file: a child dir with a .md but no SKILL.md. Such a
   # "skill" never loads, so it would be invisible to the SKILL.md scan above.
@@ -154,18 +171,67 @@ scan_root() {
   done < <(find "$root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
 }
 
-scan_root "personal" "no" "$PERSONAL_ROOT"
-scan_root "project"  "no" "$PROJECT_ROOT"
-for d in "${ADD_DIRS[@]:-}"; do
-  [[ -n "$d" ]] && scan_root "added" "no" "$d"
+# Plugins: each plugin may bundle skills under <plugin>/skills/<skill>/SKILL.md.
+# Plugin roots are deeply nested and the depth varies by install layout:
+#   <plugins>/<plugin>/skills                                  (flat/legacy)
+#   <plugins>/marketplaces/<mp>/external_plugins/<p>/skills     (marketplace)
+#   <plugins>/cache/<mp>/<p>/<version>/.claude/skills           (versioned cache)
+# So search for any 'skills' dir below the root rather than capping the depth.
+scan_plugins_root() {
+  local scope="$1" root="$2"
+  [[ -d "$root" ]] || return 0
+  while IFS= read -r skills_dir; do
+    [[ -n "$skills_dir" ]] && scan_root "$scope" "yes" "$skills_dir"
+  done < <(find "$root" -mindepth 2 -type d -name skills 2>/dev/null)
+}
+
+scan_agent() {
+  local agent="$1"
+  case "$agent" in
+    claude-code|claude)
+      scan_root "claude-personal" "no" "${HOME}/.claude/skills" "recursive"
+      scan_root "claude-project" "no" "./.claude/skills" "recursive"
+      scan_plugins_root "claude-plugin" "${HOME}/.claude/plugins"
+      ;;
+    codex)
+      scan_root "codex-personal" "no" "${HOME}/.codex/skills" "recursive"
+      scan_root "codex-project" "no" "./.codex/skills" "recursive"
+      scan_plugins_root "codex-plugin" "${HOME}/.codex/plugins/cache"
+      ;;
+    agents|agent)
+      scan_root "agents-personal" "no" "${HOME}/.agents/skills" "recursive"
+      scan_root "agents-project" "no" "./.agents/skills" "recursive"
+      ;;
+    *)
+      echo "Unknown agent preset: $agent" >&2
+      exit 2
+      ;;
+  esac
+}
+
+if [[ "$LEGACY_ROOTS_SET" -eq 0 && "$ALL_AGENTS" -eq 0 && "${#AGENTS[@]}" -eq 0 && "${#ADD_DIRS[@]}" -eq 0 ]]; then
+  ALL_AGENTS=1
+fi
+
+if [[ "$ALL_AGENTS" -eq 1 ]]; then
+  scan_agent "claude-code"
+  scan_agent "codex"
+  scan_agent "agents"
+fi
+
+for agent in "${AGENTS[@]:-}"; do
+  [[ -n "$agent" ]] && scan_agent "$agent"
 done
 
-# Plugins: each plugin may bundle skills under <plugin>/skills/<skill>/SKILL.md.
-if [[ -d "$PLUGINS_ROOT" ]]; then
-  while IFS= read -r skills_dir; do
-    [[ -n "$skills_dir" ]] && scan_root "plugin" "yes" "$skills_dir"
-  done < <(find "$PLUGINS_ROOT" -mindepth 2 -maxdepth 3 -type d -name skills 2>/dev/null)
+if [[ "$LEGACY_ROOTS_SET" -eq 1 ]]; then
+  scan_root "personal" "no" "$PERSONAL_ROOT" "recursive"
+  scan_root "project"  "no" "$PROJECT_ROOT" "recursive"
+  scan_plugins_root "plugin" "$PLUGINS_ROOT"
 fi
+
+for d in "${ADD_DIRS[@]:-}"; do
+  [[ -n "$d" ]] && scan_root "added" "no" "$d" "recursive"
+done
 
 TOTAL="$(wc -l < "$RECORDS" | tr -d ' ')"
 
@@ -178,11 +244,15 @@ if [[ "$TSV" -eq 1 ]]; then
 fi
 
 echo "============================================================================"
-echo " CLAUDE CODE SKILL INVENTORY"
+echo " AGENT SKILL INVENTORY"
 echo " Roots scanned:"
-echo "   personal : $PERSONAL_ROOT"
-echo "   project  : $PROJECT_ROOT"
-echo "   plugins  : $PLUGINS_ROOT"
+if [[ "$ALL_AGENTS" -eq 1 ]]; then echo "   agents   : claude-code, codex, agents"; fi
+for agent in "${AGENTS[@]:-}"; do [[ -n "$agent" ]] && echo "   agent    : $agent"; done
+if [[ "$LEGACY_ROOTS_SET" -eq 1 ]]; then
+  echo "   personal : $PERSONAL_ROOT"
+  echo "   project  : $PROJECT_ROOT"
+  echo "   plugins  : $PLUGINS_ROOT"
+fi
 for d in "${ADD_DIRS[@]:-}"; do [[ -n "$d" ]] && echo "   added    : $d"; done
 echo " Skills found: ${TOTAL:-0}"
 echo "============================================================================"
@@ -218,7 +288,7 @@ DUPES="$(cut -f7 "$RECORDS" | sort | uniq -d)"
 if [[ -z "$DUPES" ]]; then
   echo "None. No name collisions detected."
 else
-  echo "These names appear in more than one place. Claude may route to the wrong"
+  echo "These names appear in more than one place. Your agent may route to the wrong"
   echo "one. Pick a single owner per name during triage:"
   echo
   while IFS= read -r dn; do
