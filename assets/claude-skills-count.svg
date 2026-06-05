@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="796" height="160" viewBox="0 0 796 160" role="img" aria-labelledby="title desc">
+  <title id="title">Claude skills count terminal screenshot</title>
+  <desc id="desc">Terminal command finding SKILL.md files under HOME dot claude and showing a count of 74.</desc>
+  <rect width="796" height="160" fill="#12181f"/>
+  <rect x="0" y="0" width="796" height="2" fill="#2f6fad"/>
+  <rect x="0" y="0" width="2" height="160" fill="#2f6fad"/>
+  <text x="7" y="41" fill="#39ff14" font-family="Menlo, Consolas, Monaco, monospace" font-size="26">&gt;</text>
+  <text x="66" y="41" fill="#d9dee5" font-family="Menlo, Consolas, Monaco, monospace" font-size="24">find &quot;$HOME/.claude&quot; -iname &quot;SKILL.md&quot; | wc -l</text>
+  <text x="93" y="110" fill="#d9dee5" font-family="Menlo, Consolas, Monaco, monospace" font-size="24">74</text>
+</svg>

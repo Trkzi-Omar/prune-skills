@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="856" height="162" viewBox="0 0 856 162" role="img" aria-labelledby="title desc">
+  <title id="title">Codex and agent skills count terminal screenshot</title>
+  <desc id="desc">Terminal command finding SKILL.md files under dot codex and dot agents and showing a count of 1790.</desc>
+  <rect width="856" height="162" fill="#12181f"/>
+  <rect x="0" y="0" width="2" height="162" fill="#2f6fad"/>
+  <text x="8" y="29" fill="#39ff14" font-family="Menlo, Consolas, Monaco, monospace" font-size="26">&gt;</text>
+  <text x="41" y="64" fill="#d9dee5" font-family="Menlo, Consolas, Monaco, monospace" font-size="24">find ~/.codex ~/.agents -name SKILL.md | wc -l</text>
+  <text x="68" y="130" fill="#d9dee5" font-family="Menlo, Consolas, Monaco, monospace" font-size="24">1790</text>
+</svg>
