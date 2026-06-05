@@ -52,7 +52,14 @@ CUTOFF=$(( NOW - DAYS * 86400 ))
 
 # Enumerate skills via audit.sh --tsv (single source of truth).
 # Fields: epoch date scope plugin lines size name dir description
-SKILLS="$(bash "$AUDIT" --tsv "${PASSTHRU[@]:-}" 2>/dev/null)"
+# Guard the array expansion: under `set -u`, "${PASSTHRU[@]:-}" on an empty
+# array yields one empty-string argument, which audit.sh rejects as an unknown
+# flag (exit 2) -> no skills enumerated. Only pass the flags when we have some.
+if [[ ${#PASSTHRU[@]} -gt 0 ]]; then
+  SKILLS="$(bash "$AUDIT" --tsv "${PASSTHRU[@]}" 2>/dev/null)"
+else
+  SKILLS="$(bash "$AUDIT" --tsv 2>/dev/null)"
+fi
 if [[ -z "$SKILLS" ]]; then
   echo "No skills found to check. (Is audit.sh reachable at: $AUDIT ?)"
   exit 0
