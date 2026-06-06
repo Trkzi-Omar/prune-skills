@@ -4,14 +4,14 @@
 #
 # This script NEVER mutates anything. It only reads. It produces two outputs:
 #   1. A short summary and "start here" checklist.
-#   2. Duplicate-name and health reports, since these are the first actions.
-#   3. Top cleanup candidates by line count and age.
+#   2. Duplicate-name and actionable health reports, since these are first actions.
+#   3. Top cleanup candidates by line count.
 #   4. Optional full inventory / descriptions for drill-down.
 #
 # Usage:
 #   audit.sh [--agent NAME] [--all-agents]
 #            [--personal DIR] [--project DIR] [--plugins DIR] [--add-dir DIR]...
-#            [--limit N] [--full-table] [--full-descriptions]
+#            [--limit N] [--age-table] [--full-table] [--full-descriptions]
 #
 # Defaults to --all-agents when no roots or agents are specified.
 #
@@ -36,6 +36,7 @@ LEGACY_ROOTS_SET=0
 TSV=0
 FULL_TABLE=0
 FULL_DESCRIPTIONS=0
+AGE_TABLE=0
 LIMIT=12
 
 while [[ $# -gt 0 ]]; do
@@ -47,6 +48,7 @@ while [[ $# -gt 0 ]]; do
     --agent)    AGENTS+=("$2");     shift 2 ;;
     --all-agents) ALL_AGENTS=1; shift ;;
     --limit)    LIMIT="$2"; shift 2 ;;
+    --age-table) AGE_TABLE=1; shift ;;
     --full-table) FULL_TABLE=1; shift ;;
     --full-descriptions) FULL_DESCRIPTIONS=1; shift ;;
     --tsv)      TSV=1; shift ;;
@@ -119,12 +121,28 @@ truncate_str() {
   fi
 }
 
-# Collect one record per skill into a temp file, tab-separated:
-#   epoch date scope plugin lines size name dir description health
+ascii_bar() {
+  local value="$1" max="$2" width="${3:-24}" filled=0 empty=0
+  if (( max > 0 )); then
+    filled=$(( value * width / max ))
+  fi
+  (( filled == 0 && value > 0 )) && filled=1
+  empty=$(( width - filled ))
+  printf '['
+  while (( filled > 0 )); do printf '#'; filled=$((filled-1)); done
+  while (( empty > 0 )); do printf '.'; empty=$((empty-1)); done
+  printf ']'
+}
+
+# Collect one record per skill into temp files.
+# Records: epoch date scope plugin lines size name dir description
+# Health: name issue dir (actionable loading/frontmatter problems)
+# Notes: name issue dir (informational metadata/container quirks)
 RECORDS="$(mktemp)"
 HEALTH="$(mktemp)"
+NOTES="$(mktemp)"
 SEEN="$(mktemp)"
-trap 'rm -f "$RECORDS" "$HEALTH" "$SEEN"' EXIT
+trap 'rm -f "$RECORDS" "$HEALTH" "$NOTES" "$SEEN"' EXIT
 
 # scan_root SCOPE_LABEL PLUGIN_FLAG ROOT
 # Treats each child dir of ROOT that contains SKILL.md as one skill. The default
@@ -152,12 +170,11 @@ scan_root() {
     epoch="$(mtime_epoch "$skill_md")"
     d="$(fmt_date "$epoch")"
 
-    # Deterministic health checks (the script can do these; triage need not).
-    health=""
-    head -1 "$skill_md" | grep -q '^---' || health="${health}no-frontmatter;"
-    [[ -z "$desc" ]] && health="${health}no-description;"
-    [[ -n "$fm_name" && "$fm_name" != "$base" ]] && health="${health}name!=folder($fm_name);"
-    [[ -n "$health" ]] && printf '%s\t%s\t%s\n' "$name" "${health%;}" "$dir" >> "$HEALTH"
+    # Deterministic checks. Keep only loading/frontmatter problems as health.
+    # Folder/name mismatches are common in packaged skills, so report as notes.
+    head -1 "$skill_md" | grep -q '^---' || printf '%s\t%s\t%s\n' "$name" "no-frontmatter" "$dir" >> "$HEALTH"
+    [[ -z "$desc" ]] && printf '%s\t%s\t%s\n' "$name" "no-description" "$dir" >> "$HEALTH"
+    [[ -n "$fm_name" && "$fm_name" != "$base" ]] && printf '%s\t%s\t%s\n' "$name" "name!=folder($fm_name)" "$dir" >> "$NOTES"
 
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$epoch" "$d" "$scope" "$plugin" "${lines:-0}" "${size:-?}" "$name" "$dir" "$desc" >> "$RECORDS"
@@ -169,7 +186,7 @@ scan_root() {
   while IFS= read -r child; do
     [[ -n "$child" ]] || continue
     if [[ ! -f "$child/SKILL.md" ]] && compgen -G "$child/*.md" >/dev/null 2>&1; then
-      printf '%s\t%s\t%s\n' "$(basename "$child")" "no-SKILL.md(has other .md)" "$child" >> "$HEALTH"
+      printf '%s\t%s\t%s\n' "$(basename "$child")" "container-with-md-no-SKILL.md" "$child" >> "$NOTES"
     fi
   done < <(find "$root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
 }
@@ -272,32 +289,51 @@ if [[ -n "$DUPES" ]]; then
   DUPES_COUNT="$(printf '%s\n' "$DUPES" | sed '/^$/d' | wc -l | tr -d ' ')"
 fi
 HEALTH_COUNT="$(sort -u "$HEALTH" 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ')"
+NOTES_COUNT="$(sort -u "$NOTES" 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ')"
 PLUGIN_COUNT="$(awk -F'\t' '$4=="yes"{c++} END{print c+0}' "$RECORDS")"
 TOTAL_LINES="$(awk -F'\t' '{sum += $5} END{print sum+0}' "$RECORDS")"
+LARGE_COUNT="$(awk -F'\t' '$5>=400{c++} END{print c+0}' "$RECORDS")"
+MEDIUM_COUNT="$(awk -F'\t' '$5>=150 && $5<400{c++} END{print c+0}' "$RECORDS")"
+SMALL_COUNT="$(awk -F'\t' '$5<150{c++} END{print c+0}' "$RECORDS")"
 
-echo "Summary"
-echo "-------"
-printf '  Skills        : %s\n' "$TOTAL"
-printf '  Plugin skills : %s\n' "$PLUGIN_COUNT"
-printf '  Duplicate names: %s\n' "$DUPES_COUNT"
-printf '  Health issues : %s\n' "$HEALTH_COUNT"
-printf '  SKILL.md lines: %s total\n' "$TOTAL_LINES"
+echo "Snapshot"
+echo "--------"
+printf '  %-16s %s\n' "Skills" "$TOTAL"
+printf '  %-16s %s\n' "Plugin skills" "$PLUGIN_COUNT"
+printf '  %-16s %s\n' "Duplicate names" "$DUPES_COUNT"
+printf '  %-16s %s\n' "Health issues" "$HEALTH_COUNT"
+printf '  %-16s %s\n' "Metadata notes" "$NOTES_COUNT"
+printf '  %-16s %s total\n' "SKILL.md lines" "$TOTAL_LINES"
 
 echo
-echo "Start here"
-echo "----------"
+echo "Load profile"
+echo "------------"
+printf '  %-14s ' "Large 400+"
+ascii_bar "$LARGE_COUNT" "$TOTAL"
+printf ' %s\n' "$LARGE_COUNT"
+printf '  %-14s ' "Medium 150-399"
+ascii_bar "$MEDIUM_COUNT" "$TOTAL"
+printf ' %s\n' "$MEDIUM_COUNT"
+printf '  %-14s ' "Small <150"
+ascii_bar "$SMALL_COUNT" "$TOTAL"
+printf ' %s\n' "$SMALL_COUNT"
+
+echo
+echo "Next actions"
+echo "------------"
 if [[ "$HEALTH_COUNT" -gt 0 ]]; then
-  echo "  1. Fix health issues first. Broken metadata can prevent loading or misroute skills."
+  echo "  1. Fix health issues first; missing frontmatter or descriptions can break routing."
 else
-  echo "  1. Health metadata looks OK."
+  echo "  1. No loading-critical health issues found."
 fi
 if [[ "$DUPES_COUNT" -gt 0 ]]; then
   echo "  2. Resolve duplicate names. Pick one owner per name before pruning."
 else
   echo "  2. No duplicate names detected."
 fi
-echo "  3. Review the largest and oldest skills below; these are triage candidates, not delete orders."
-echo "  4. Use --full-table for every skill, or --full-descriptions for overlap triage."
+echo "  3. Review metadata notes only if a skill fails to load; many package layouts are intentional."
+echo "  4. Review large skills below as triage candidates, not delete orders."
+echo "  5. Use --age-table, --full-table, or --full-descriptions only for drill-down."
 
 # ---- Health problems -------------------------------------------------------
 echo
@@ -305,11 +341,27 @@ echo "--------------------------------------------------------------------------
 echo " Health issues"
 echo "----------------------------------------------------------------------------"
 if [[ -s "$HEALTH" ]]; then
-  echo "Fix these before pruning. A broken skill can fail to load or route poorly:"
+  echo "Fix these before pruning. Missing frontmatter or descriptions can break routing:"
   echo
   sort -u "$HEALTH" | while IFS=$'\t' read -r hn hissue hdir; do
     printf '  %-28s %s\n' "$hn" "$hissue"
     printf '      %s\n' "$hdir"
+  done
+else
+  echo "None."
+fi
+
+# ---- Metadata notes ---------------------------------------------------------
+echo
+echo "----------------------------------------------------------------------------"
+echo " Metadata notes"
+echo "----------------------------------------------------------------------------"
+if [[ -s "$NOTES" ]]; then
+  echo "Informational. These are common in packaged skills and are not prune reasons:"
+  echo
+  sort -u "$NOTES" | while IFS=$'\t' read -r nn nissue ndir; do
+    printf '  %-28s %s\n' "$nn" "$nissue"
+    printf '      %s\n' "$ndir"
   done
 else
   echo "None."
@@ -345,13 +397,15 @@ sort -t$'\t' -k5,5nr "$RECORDS" | head -n "$LIMIT" | while IFS=$'\t' read -r epo
   printf '%6s  %-28s %-16s %s\n' "$lines" "$(truncate_str "$name" 28)" "$scope" "$(truncate_str "$desc" 68)"
 done
 
-echo
-echo "Oldest modified dates. Old does not mean unused; pair this with usage.sh."
-printf '%-12s %-28s %-16s %s\n' "MODIFIED" "NAME" "SCOPE" "DESCRIPTION"
-printf '%-12s %-28s %-16s %s\n' "------------" "----------------------------" "----------------" "-----------"
-sort -t$'\t' -k1,1n "$RECORDS" | head -n "$LIMIT" | while IFS=$'\t' read -r epoch d scope plugin lines size name dir desc; do
-  printf '%-12s %-28s %-16s %s\n' "$d" "$(truncate_str "$name" 28)" "$scope" "$(truncate_str "$desc" 68)"
-done
+if [[ "$AGE_TABLE" -eq 1 ]]; then
+  echo
+  echo "Oldest modified dates. Old does not mean unused; pair this with usage.sh."
+  printf '%-12s %-28s %-16s %s\n' "MODIFIED" "NAME" "SCOPE" "DESCRIPTION"
+  printf '%-12s %-28s %-16s %s\n' "------------" "----------------------------" "----------------" "-----------"
+  sort -t$'\t' -k1,1n "$RECORDS" | head -n "$LIMIT" | while IFS=$'\t' read -r epoch d scope plugin lines size name dir desc; do
+    printf '%-12s %-28s %-16s %s\n' "$d" "$(truncate_str "$name" 28)" "$scope" "$(truncate_str "$desc" 68)"
+  done
+fi
 
 if [[ "$FULL_TABLE" -eq 1 ]]; then
   echo

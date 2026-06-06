@@ -5,6 +5,8 @@ A read-first, reversible cleanup skill for agent skill libraries that got too bi
 Agent skills are useful. But when your library grows past the point where you can
 name what is installed, you need a process - not a hunch.
 
+![Signal lattice showing skill sprawl becoming an audit map](assets/signal-lattice.svg)
+
 This skill helps an agent answer:
 
 - What skills do I have?
@@ -43,6 +45,10 @@ bash scripts/usage.sh --all-agents --days 7
 `usage.sh` scans the same log history window as `--days` by default. For a
 slower exhaustive scan, add `--log-history-days 0`.
 
+If the scanned transcripts contain no explicit skill-use markers, the report
+stops and says there is no usable signal instead of implying every skill is
+unused.
+
 ## Why This Exists
 
 I built this because my skills directory got out of hand.
@@ -70,8 +76,8 @@ The skill wraps three shell scripts:
 
 - **`audit.sh`** - read-only inventory across Claude Code, Codex, shared agent,
   project, plugin, and extra skill roots. Leads with a concise summary, then
-  reports duplicate names, missing descriptions, name/folder mismatches, and
-  non-loading skill folders.
+  reports duplicate names, loading-critical health issues, informational metadata
+  notes, and large skills worth reviewing.
 - **`usage.sh`** - read-only usage signal from Claude and Codex transcript logs.
   Looks for explicit `Using \`skill-name\`` markers, then shows stale skills and
   skills with no readable log hits.
@@ -81,6 +87,43 @@ The skill wraps three shell scripts:
 The important part is the workflow. `usage.sh` does not prove a skill is unused.
 It only gives you a triage signal. The skill should still quarantine first and
 delete later.
+
+## What The Audit Feels Like
+
+The default audit output is meant to be read, not parsed. It starts with a small
+snapshot, then tells you what to do next before showing details.
+
+```text
+============================================================================
+ AGENT SKILL AUDIT
+ Roots scanned:
+   agent    : codex
+ Skills found: 59
+============================================================================
+
+Snapshot
+--------
+  Skills           59
+  Plugin skills    4
+  Duplicate names  1
+  Health issues    0
+  Metadata notes   7
+  SKILL.md lines   15264 total
+
+Load profile
+------------
+  Large 400+     [####....................] 11
+  Medium 150-399 [##########..............] 25
+  Small <150     [#########...............] 23
+
+Next actions
+------------
+  1. No loading-critical health issues found.
+  2. Resolve duplicate names. Pick one owner per name before pruning.
+  3. Review metadata notes only if a skill fails to load; many package layouts are intentional.
+  4. Review large skills below as triage candidates, not delete orders.
+  5. Use --age-table, --full-table, or --full-descriptions only for drill-down.
+```
 
 ## Manual Script Usage
 
@@ -100,6 +143,12 @@ Show every skill in the inventory table:
 
 ```bash
 bash scripts/audit.sh --all-agents --full-table
+```
+
+Show oldest modified dates as supporting context:
+
+```bash
+bash scripts/audit.sh --all-agents --age-table
 ```
 
 Show full descriptions for trigger-overlap triage:

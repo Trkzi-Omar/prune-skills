@@ -174,6 +174,25 @@ else
   grep -FHo -f "$PATTERNS_FILE" "${LOG_FILES[@]}" 2>/dev/null > "$HITS_FILE" || true
 fi
 
+HIT_COUNT="$(wc -l < "$HITS_FILE" | tr -d '[:space:]')"
+if [[ "$HIT_COUNT" -eq 0 ]]; then
+  echo
+  echo "No explicit skill-use markers matched in the scanned transcripts."
+  echo
+  echo "What this means:"
+  echo "  - Usage cannot be ranked from these logs."
+  echo "  - This does not mean every skill is unused."
+  echo "  - Older, compacted, or differently formatted sessions may omit the marker."
+  echo
+  echo "Next actions:"
+  echo "  1. Re-run with --log-history-days 0 to scan all readable logs."
+  echo "  2. Use audit.sh for duplicate names, health issues, and large-skill triage."
+  echo "  3. Quarantine and observe before deleting anything."
+  echo
+  echo "Read-only. No files were changed."
+  exit 0
+fi
+
 report="$(
   awk -v namesfile="$NAMES_FILE" -v mtimesfile="$MTIMES_FILE" -v hitsfile="$HITS_FILE" -F '\t' '
     FILENAME == namesfile {

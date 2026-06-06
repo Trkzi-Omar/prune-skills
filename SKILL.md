@@ -16,11 +16,12 @@ This is a workflow-enforcement skill: run the procedure, do not improvise deleti
 ## Tools (bundled, in `scripts/`)
 
 - `audit.sh` - read-only. Inventory across Claude Code, Codex, and local agent roots,
-  with a concise human-readable summary first, plus duplicate-name, health, largest,
-  and oldest reports. Spots collisions, missing descriptions, name/folder mismatches,
-  and primary files not named `SKILL.md`. Supports `--agent claude-code`,
-  `--agent codex`, `--agent agents`, `--all-agents`, `--limit N`, `--full-table`,
-  and `--full-descriptions`. Never mutates.
+  with a concise human-readable summary first, plus duplicate-name, loading-critical
+  health, metadata-note, and largest-skill reports. Spots collisions, missing
+  frontmatter/descriptions, and informational package-layout quirks without treating
+  every folder mismatch as a prune reason. Supports `--agent claude-code`,
+  `--agent codex`, `--agent agents`, `--all-agents`, `--limit N`, `--age-table`,
+  `--full-table`, and `--full-descriptions`. Never mutates.
 - `usage.sh` - read-only. Last-used per skill, derived from Claude Code transcript logs
   under `~/.claude/projects` and Codex JSONL logs under `~/.codex/sessions` and
   `~/.codex/archived_sessions`. Looks for explicit `Using \`skill-name\`` markers
@@ -45,10 +46,12 @@ Nothing destructive happens before a snapshot exists.
 ### 2. Inventory (read-only)
 
 - [ ] `bash scripts/audit.sh --all-agents`
-- [ ] Read the **Start here**, duplicate-name, and health sections aloud to the user.
+- [ ] Read the **Next actions**, duplicate-name, and health sections aloud to the user.
       These are the first cuts.
+- [ ] Treat metadata notes as informational unless the skill is actually failing to load.
 - [ ] Use `--full-table` only when the user wants every skill listed. Use
-      `--full-descriptions` only when doing trigger-overlap triage.
+      `--full-descriptions` only when doing trigger-overlap triage. Use `--age-table`
+      only as supporting context, never as a pruning signal by itself.
 - [ ] If the user only wanted to look, stop here. This satisfies a pure-audit request.
 
 ### 3. Usage (read-only)
@@ -67,7 +70,7 @@ Bucket each skill as **keep**, **merge**, or **quarantine** using four signals:
       full-descriptions block to find these. Merge candidates.
 - [ ] **Staleness**: stale in `usage.sh` plus deprecated APIs/patterns inside the SKILL.md.
 - [ ] **Bloat**: high SKILL.md line count for a rarely-hit skill. It costs startup context.
-- [ ] Carry every health problem from audit into a bucket too (broken skills misroute).
+- [ ] Carry every loading-critical health problem from audit into a bucket too.
 - [ ] Present the buckets as a proposal. Wait for confirmation. The user overrules you.
 
 ### 5. Quarantine (reversible)

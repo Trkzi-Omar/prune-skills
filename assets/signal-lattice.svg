@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">Signal lattice showing skill sprawl becoming an audit map</title>
+  <desc id="desc">A deterministic network of skill nodes flowing from dense disorder on the left into grouped audit lanes on the right.</desc>
+  <rect width="1200" height="520" rx="28" fill="#f8fafc"/>
+  <path d="M46 420 C210 220 290 485 430 288 S720 120 1110 256" fill="none" stroke="#d4d4d8" stroke-width="1.2"/>
+  <path d="M82 122 C260 258 358 88 504 210 S812 420 1074 146" fill="none" stroke="#e4e4e7" stroke-width="1"/>
+  <path d="M120 356 C274 298 335 346 460 196 S720 148 1040 346" fill="none" stroke="#d1d5db" stroke-width="1"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M137 139 L214 104 L301 151 L384 114 L458 165 L548 136" stroke="#94a3b8" stroke-width="1"/>
+    <path d="M116 264 L209 306 L296 246 L382 312 L474 260 L556 292" stroke="#94a3b8" stroke-width="1"/>
+    <path d="M154 391 L237 356 L326 416 L418 374 L512 424" stroke="#94a3b8" stroke-width="1"/>
+    <path d="M650 132 H1062" stroke="#0f766e" stroke-width="1.5"/>
+    <path d="M650 258 H1062" stroke="#be123c" stroke-width="1.5"/>
+    <path d="M650 384 H1062" stroke="#334155" stroke-width="1.5"/>
+  </g>
+  <g fill="#0f172a">
+    <circle cx="137" cy="139" r="5"/>
+    <circle cx="214" cy="104" r="9"/>
+    <circle cx="301" cy="151" r="6"/>
+    <circle cx="384" cy="114" r="12"/>
+    <circle cx="458" cy="165" r="7"/>
+    <circle cx="548" cy="136" r="10"/>
+    <circle cx="116" cy="264" r="7"/>
+    <circle cx="209" cy="306" r="13"/>
+    <circle cx="296" cy="246" r="6"/>
+    <circle cx="382" cy="312" r="9"/>
+    <circle cx="474" cy="260" r="5"/>
+    <circle cx="556" cy="292" r="8"/>
+    <circle cx="154" cy="391" r="10"/>
+    <circle cx="237" cy="356" r="6"/>
+    <circle cx="326" cy="416" r="14"/>
+    <circle cx="418" cy="374" r="7"/>
+    <circle cx="512" cy="424" r="11"/>
+  </g>
+  <g>
+    <rect x="646" y="102" width="448" height="60" rx="14" fill="#ffffff" stroke="#99f6e4"/>
+    <rect x="646" y="228" width="448" height="60" rx="14" fill="#ffffff" stroke="#fecdd3"/>
+    <rect x="646" y="354" width="448" height="60" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+    <circle cx="686" cy="132" r="9" fill="#0f766e"/>
+    <circle cx="686" cy="258" r="9" fill="#be123c"/>
+    <circle cx="686" cy="384" r="9" fill="#334155"/>
+  </g>
+  <g font-family="Geist, Satoshi, Arial, sans-serif" fill="#0f172a">
+    <text x="64" y="72" font-size="28" font-weight="700">skill sprawl</text>
+    <text x="64" y="100" font-size="15" fill="#64748b">many triggers, uneven weight, hidden collisions</text>
+    <text x="724" y="126" font-size="19" font-weight="700">health first</text>
+    <text x="724" y="148" font-size="14" fill="#475569">broken metadata blocks reliable routing</text>
+    <text x="724" y="252" font-size="19" font-weight="700">duplicates second</text>
+    <text x="724" y="274" font-size="14" fill="#475569">one name needs one owner</text>
+    <text x="724" y="378" font-size="19" font-weight="700">load profile third</text>
+    <text x="724" y="400" font-size="14" fill="#475569">large and old skills become review candidates</text>
+  </g>
+  <g font-family="Geist Mono, JetBrains Mono, monospace" font-size="12" fill="#64748b">
+    <text x="64" y="468">seed: 1790 / deterministic lattice / read before prune</text>
+    <text x="820" y="468">snapshot -> quarantine -> observe -> purge</text>
+  </g>
+</svg>
