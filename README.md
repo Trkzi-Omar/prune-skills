@@ -53,6 +53,11 @@ unused.
 
 I built this because my skills directory got out of hand.
 
+I kept getting this warning from Codex:
+<img width="773" height="62" alt="⚠ Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest.
+" src="https://github.com/user-attachments/assets/ef2bebdf-3f27-4cda-bc87-cdf7057d9eca" />
+
+
 My Claude skills had already grown to 74 files:
 
 ![Terminal screenshot showing 74 Claude skills](assets/claude-skills-count.svg)
